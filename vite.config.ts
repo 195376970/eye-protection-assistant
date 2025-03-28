@@ -1,42 +1,24 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
-import electron from 'vite-plugin-electron';
+import { resolve } from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [
-    react(),
-    electron({
-      entry: [
-        'src/main/main.ts',
-        'src/preload/preload.ts'
-      ],
-      vite: {
-        build: {
-          outDir: 'dist/main',
-          rollupOptions: {
-            output: {
-              entryFileNames: '[name].js',
-            },
-          },
-        },
-      },
-    }),
-  ],
+  plugins: [react()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
+      '@': resolve(__dirname, './src')
+    }
   },
+  base: './',
   build: {
     outDir: 'dist/renderer',
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        main: path.resolve(__dirname, 'index.html'),
-        reminder: path.resolve(__dirname, 'reminder.html')
+        main: resolve(__dirname, 'src/renderer/index.html'),
+        reminder: resolve(__dirname, 'src/renderer/reminder.html')
       }
     }
-  },
-}); 
+  }
+});
