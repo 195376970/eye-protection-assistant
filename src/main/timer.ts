@@ -1,299 +1,255 @@
-import { BrowserWindow, ipcMain, screen } from 'electron';
-import path from 'path';
+/**
+ * 计时器模块
+ * 实现番茄钟工作法的工作和休息计时
+ */
 
 // 计时器状态枚举
-enum TimerState {
-  IDLE,
-  WORKING,
-  RESTING,
-  PAUSED
+export enum TimerState {
+  IDLE = 0,     // 空闲状态
+  WORKING = 1,  // 工作中
+  RESTING = 2,  // 休息中
+  PAUSED = 3,   // 暂停状态
 }
 
-// 事件回调类型
-type EventCallback = () => void;
+// 计时器事件回调类型
+type TimerCallbacks = {
+  onUpdate: (data: { remainingTime: number; totalTime: number; state: TimerState }) => void;
+  onWorkComplete: () => void;
+  onRestComplete: () => void;
+};
 
-// 计时器类
+/**
+ * 计时器类
+ * 管理番茄钟计时器的不同状态和计时逻辑
+ */
 export class Timer {
-  private state: TimerState = TimerState.IDLE;
-  private workTime: number = 25 * 60; // 默认25分钟工作时间（秒）
-  private restTime: number = 20; // 默认20秒休息时间
+  // 当前状态
+  private _state: TimerState = TimerState.IDLE;
+  // 工作时间和休息时间（秒）
+  private workTime: number = 25 * 60;
+  private restTime: number = 20;
+  // 剩余时间（秒）
   private remainingTime: number = 0;
+  // 计时器间隔ID
   private intervalId: NodeJS.Timeout | null = null;
-  private mainWindow: BrowserWindow | null = null;
-  private reminderWindow: BrowserWindow | null = null;
-  
+  // 上次计数时间
+  private lastCountTime: number = 0;
   // 事件回调
-  private restStartCallbacks: EventCallback[] = [];
-  private restEndCallbacks: EventCallback[] = [];
+  private callbacks: TimerCallbacks;
 
-  constructor(mainWindow: BrowserWindow) {
-    this.mainWindow = mainWindow;
-    this.setupIpcHandlers();
+  /**
+   * 构造函数
+   * @param callbacks 事件回调
+   */
+  constructor(callbacks: TimerCallbacks) {
+    this.callbacks = callbacks;
   }
 
-  // 设置IPC处理程序
-  private setupIpcHandlers() {
-    ipcMain.handle('start-timer', (_event, workTime, restTime) => {
-      this.startTimer(workTime, restTime);
-      return true;
-    });
+  /**
+   * 获取当前状态
+   */
+  get state(): TimerState {
+    return this._state;
+  }
 
-    ipcMain.handle('pause-timer', () => {
-      this.pauseTimer();
-      return true;
-    });
+  /**
+   * 更新状态并通知监听器
+   */
+  private updateState(newState: TimerState): void {
+    this._state = newState;
+    this.updateUI();
+  }
 
-    ipcMain.handle('reset-timer', () => {
-      this.resetTimer();
-      return true;
-    });
-
-    ipcMain.handle('finish-rest', () => {
-      this.finishRest();
-      return true;
+  /**
+   * 更新UI
+   */
+  private updateUI(): void {
+    // 通过回调函数更新UI
+    this.callbacks.onUpdate({
+      remainingTime: this.remainingTime,
+      totalTime: this._state === TimerState.WORKING ? this.workTime : this.restTime,
+      state: this._state,
     });
   }
 
-  // 注册休息开始事件监听器
-  public onRestStart(callback: EventCallback): void {
-    this.restStartCallbacks.push(callback);
-  }
+  /**
+   * 启动计时器
+   * @param workTime 工作时间（秒）
+   * @param restTime 休息时间（秒）
+   * @returns 是否成功启动
+   */
+  startTimer(workTime?: number, restTime?: number): boolean {
+    console.log(`启动计时器: 当前状态=${this._state}, 工作时间=${workTime}, 休息时间=${restTime}`);
 
-  // 注册休息结束事件监听器
-  public onRestEnd(callback: EventCallback): void {
-    this.restEndCallbacks.push(callback);
-  }
-
-  // 开始计时器
-  public startTimer(workTime?: number, restTime?: number) {
-    console.log(`startTimer调用，当前状态: ${this.state}，剩余时间: ${this.remainingTime}`);
-    if (workTime !== undefined) this.workTime = workTime;
-    if (restTime !== undefined) this.restTime = restTime;
-
-    if (this.state === TimerState.PAUSED) {
-      // 如果是暂停状态，恢复计时
-      console.log('从暂停状态恢复计时，剩余时间:', this.remainingTime);
-      // 维持之前的状态，继续之前的工作或休息
-      if (this.remainingTime === 0) {
-        // 防止出现剩余时间为0的情况
-        this.remainingTime = this.workTime;
-        this.state = TimerState.WORKING;
-      } else {
-        this.state = TimerState.WORKING; // 默认恢复到工作状态
-      }
-    } else {
-      // 重新开始计时
-      console.log('重新开始计时');
-      this.state = TimerState.WORKING;
-      this.remainingTime = this.workTime;
+    // 如果已在工作中或休息中，则不重新启动
+    if (this._state === TimerState.WORKING || this._state === TimerState.RESTING) {
+      console.log('计时器已在运行中，无需重新启动');
+      return false;
     }
 
-    // 强制更新UI，确保状态显示正确
-    this.updateTimerUI();
-    // 然后开始计数
-    this.startCounting();
-  }
-
-  // 暂停计时器
-  public pauseTimer() {
-    console.log(`pauseTimer调用，当前状态: ${this.state}`);
-    
-    if (this.state === TimerState.WORKING || this.state === TimerState.RESTING) {
-      console.log('设置状态为PAUSED，当前剩余时间:', this.remainingTime);
-      this.state = TimerState.PAUSED;
-      if (this.intervalId) {
-        clearInterval(this.intervalId);
-        this.intervalId = null;
-      }
-      // 确保在暂停后立即更新UI状态
-      this.updateTimerUI();
-    } else {
-      console.log(`当前状态 ${this.state} 不允许暂停`);
+    // 如果是暂停状态，恢复计时
+    if (this._state === TimerState.PAUSED) {
+      console.log('从暂停状态恢复计时');
+      this.resumeTimer();
+      return true;
     }
-  }
 
-  // 重置计时器
-  public resetTimer() {
-    this.state = TimerState.IDLE;
-    this.remainingTime = 0;
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
+    // 更新工作时间和休息时间
+    if (workTime !== undefined && workTime > 0) {
+      this.workTime = workTime;
     }
-    this.updateTimerUI();
-    this.closeReminderWindow();
-  }
+    if (restTime !== undefined && restTime > 0) {
+      this.restTime = restTime;
+    }
 
-  // 结束休息
-  public finishRest() {
-    this.closeReminderWindow();
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-    }
-    this.mainWindow?.webContents.send('rest-end');
-    
-    // 触发休息结束事件
-    this.triggerRestEndCallbacks();
-    
-    // 休息结束后，自动开始新的工作时间倒计时
-    console.log('休息结束，自动开始新的工作时间倒计时');
-    this.state = TimerState.WORKING;
+    // 从空闲状态开始，设置为工作时间
     this.remainingTime = this.workTime;
-    this.updateTimerUI(); // 立即更新UI
-    this.startCounting(); // 开始新的计时
+    this.updateState(TimerState.WORKING);
+    
+    // 开始计时
+    this.startCounting();
+    return true;
   }
 
-  // 开始计数
-  private startCounting() {
-    console.log('开始计数，当前状态:', this.state, '剩余时间:', this.remainingTime);
+  /**
+   * 暂停计时器
+   * @returns 是否成功暂停
+   */
+  pauseTimer(): boolean {
+    // 只有在工作中才能暂停
+    if (this._state !== TimerState.WORKING) {
+      console.log(`当前状态(${this._state})不支持暂停操作`);
+      return false;
+    }
+
+    // 暂停计时
+    this.stopCounting();
+    this.updateState(TimerState.PAUSED);
+    return true;
+  }
+
+  /**
+   * 恢复计时器
+   * @returns 是否成功恢复
+   */
+  private resumeTimer(): boolean {
+    // 只有暂停状态才能恢复
+    if (this._state !== TimerState.PAUSED) {
+      console.log(`当前状态(${this._state})不支持恢复操作`);
+      return false;
+    }
+
+    // 恢复为工作状态并重新开始计时
+    this.updateState(TimerState.WORKING);
+    this.startCounting();
+    return true;
+  }
+
+  /**
+   * 重置计时器
+   * @returns 是否成功重置
+   */
+  resetTimer(): boolean {
+    // 停止计时
+    this.stopCounting();
+    // 重置状态为空闲
+    this.updateState(TimerState.IDLE);
+    // 重置剩余时间
+    this.remainingTime = 0;
+    this.updateUI();
+    return true;
+  }
+
+  /**
+   * 强制完成休息
+   * @returns 是否成功完成休息
+   */
+  finishRest(): boolean {
+    if (this._state !== TimerState.RESTING) {
+      console.log(`当前状态(${this._state})不是休息状态，无法完成休息`);
+      return false;
+    }
+
+    console.log('强制完成休息时间');
+    this.stopCounting();
+    this.updateState(TimerState.IDLE);
+    this.remainingTime = 0;
+    this.updateUI();
+    this.callbacks.onRestComplete();
+    return true;
+  }
+
+  /**
+   * 停止计时器
+   */
+  stopTimer(): void {
+    this.stopCounting();
+    this.updateState(TimerState.IDLE);
+  }
+
+  /**
+   * 开始倒计时
+   */
+  private startCounting(): void {
+    // 在开始倒计时前停止已存在的定时器
+    this.stopCounting();
     
-    if (this.intervalId) {
+    // 记录当前时间
+    this.lastCountTime = Date.now();
+    
+    // 创建一个新的定时器
+    this.intervalId = setInterval(() => this.tick(), 100); // 每100毫秒更新一次
+  }
+
+  /**
+   * 停止倒计时
+   */
+  private stopCounting(): void {
+    if (this.intervalId !== null) {
       clearInterval(this.intervalId);
+      this.intervalId = null;
     }
-
-    this.intervalId = setInterval(() => {
-      if (this.remainingTime > 0) {
-        this.remainingTime--;
-        this.updateTimerUI();
-      } else {
-        if (this.state === TimerState.WORKING) {
-          console.log('工作时间结束，开始休息');
-          this.startRest();
-        } else if (this.state === TimerState.RESTING) {
-          console.log('休息时间结束');
-          this.finishRest();
-        } else {
-          console.log('计时器到达零，但状态既不是工作也不是休息:', this.state);
-          // 异常情况处理，重置为工作状态
-          this.state = TimerState.WORKING;
-          this.remainingTime = this.workTime;
-          this.updateTimerUI();
-        }
-      }
-    }, 1000);
   }
 
-  // 开始休息
-  private startRest() {
-    this.state = TimerState.RESTING;
-    this.remainingTime = this.restTime;
-    this.showReminderWindow();
-    this.mainWindow?.webContents.send('rest-start');
+  /**
+   * 倒计时执行逻辑
+   */
+  private tick(): void {
+    // 计算实际经过的时间（秒）
+    const now = Date.now();
+    const elapsed = (now - this.lastCountTime) / 1000;
+    this.lastCountTime = now;
+
+    // 更新剩余时间
+    this.remainingTime = Math.max(0, this.remainingTime - elapsed);
     
-    // 触发休息开始事件
-    this.triggerRestStartCallbacks();
-  }
+    // 更新UI
+    this.updateUI();
 
-  // 触发休息开始事件回调
-  private triggerRestStartCallbacks() {
-    for (const callback of this.restStartCallbacks) {
-      try {
-        callback();
-      } catch (error) {
-        console.error('执行休息开始回调时出错:', error);
-      }
+    // 检查是否完成
+    if (this.remainingTime <= 0) {
+      this.handleTimeComplete();
     }
   }
 
-  // 触发休息结束事件回调
-  private triggerRestEndCallbacks() {
-    for (const callback of this.restEndCallbacks) {
-      try {
-        callback();
-      } catch (error) {
-        console.error('执行休息结束回调时出错:', error);
-      }
-    }
-  }
+  /**
+   * 处理时间完成的逻辑
+   */
+  private handleTimeComplete(): void {
+    this.stopCounting();
 
-  // 更新计时器UI
-  private updateTimerUI() {
-    console.log(`发送UI更新：状态=${this.state}，剩余时间=${this.remainingTime}`);
-    if (this.mainWindow) {
-      this.mainWindow.webContents.send('timer-update', {
-        state: this.state,
-        remainingTime: this.remainingTime,
-        totalTime: this.state === TimerState.WORKING ? this.workTime : this.restTime
-      });
-    }
-
-    if (this.reminderWindow && this.state === TimerState.RESTING) {
-      this.reminderWindow.webContents.send('rest-timer-update', {
-        remainingTime: this.remainingTime,
-        totalTime: this.restTime
-      });
-    }
-  }
-
-  // 显示提醒窗口
-  private showReminderWindow() {
-    if (this.reminderWindow) {
-      this.reminderWindow.focus();
-      return;
-    }
-
-    const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-    
-    this.reminderWindow = new BrowserWindow({
-      width,
-      height,
-      frame: false,
-      transparent: true,
-      alwaysOnTop: true,
-      skipTaskbar: false,
-      fullscreen: true,
-      closable: true,
-      movable: false,
-      resizable: false,
-      hasShadow: false,
-      webPreferences: {
-        preload: path.join(__dirname, '../preload/preload.js'),
-        nodeIntegration: false,
-        contextIsolation: true,
-      },
-      // 设置窗口级别为屏幕保护级别，确保在所有应用之上
-      type: 'normal', // 使用normal类型而不是使用screen-saver类型，避免某些兼容性问题
-    });
-
-    // 设置窗口为顶层，确保在全屏视频上方显示
-    this.reminderWindow.setAlwaysOnTop(true, 'screen-saver', 1);
-    
-    if (process.env.NODE_ENV === 'development') {
-      this.reminderWindow.loadURL('http://localhost:5173/reminder.html');
-    } else {
-      this.reminderWindow.loadFile(path.join(__dirname, '../renderer/reminder.html'));
-    }
-
-    // 窗口加载完成后，再次确保窗口在最顶层
-    this.reminderWindow.webContents.on('did-finish-load', () => {
-      if (this.reminderWindow) {
-        this.reminderWindow.setAlwaysOnTop(true, 'screen-saver', 1);
-        this.reminderWindow.focus();
-        
-        // 额外设置显示在全屏视频上方
-        setTimeout(() => {
-          if (this.reminderWindow) {
-            this.reminderWindow.setAlwaysOnTop(true, 'screen-saver', 1);
-            this.reminderWindow.focus();
-          }
-        }, 300);
-      }
-    });
-
-    this.reminderWindow.on('closed', () => {
-      this.reminderWindow = null;
-      if (this.state === TimerState.RESTING) {
-        this.finishRest();
-      }
-    });
-  }
-
-  // 关闭提醒窗口
-  private closeReminderWindow() {
-    if (this.reminderWindow) {
-      this.reminderWindow.close();
-      this.reminderWindow = null;
+    if (this._state === TimerState.WORKING) {
+      // 工作时间结束，转入休息时间
+      console.log('工作时间结束，转入休息时间');
+      this.remainingTime = this.restTime;
+      this.updateState(TimerState.RESTING);
+      this.startCounting();
+      this.callbacks.onWorkComplete();
+    } else if (this._state === TimerState.RESTING) {
+      // 休息时间结束，回到初始状态
+      console.log('休息时间结束，回到初始状态');
+      this.updateState(TimerState.IDLE);
+      this.callbacks.onRestComplete();
     }
   }
 }
