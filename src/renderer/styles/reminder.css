@@ -1,0 +1,350 @@
+/* 基础样式 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body, html {
+  height: 100%;
+  width: 100%;
+  font-family: 'Poppins', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  overflow: hidden;
+}
+
+body {
+  color: #fff;
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); /* 高级深色渐变背景 */
+  background-image: url('https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?q=80&w=1470&auto=format&fit=crop');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+#reminder-root {
+  height: 100%;
+  width: 100%;
+}
+
+/* 全屏提醒样式 */
+.fullscreen-reminder {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* 背景装饰元素 */
+.fullscreen-reminder::before {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at 20% 30%, rgba(59, 130, 246, 0.2) 0%, transparent 70%),
+              radial-gradient(circle at 80% 70%, rgba(91, 33, 182, 0.15) 0%, transparent 60%);
+  z-index: 1;
+  opacity: 0.8;
+  animation: pulsate 8s infinite alternate;
+}
+
+@keyframes pulsate {
+  0% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0.9;
+    transform: scale(1.05);
+  }
+}
+
+.reminder-content {
+  max-width: 650px;
+  padding: 60px;
+  text-align: center;
+  background: rgba(15, 23, 42, 0.65);
+  border-radius: 24px;
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4),
+              inset 0 2px 1px rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  animation: fadeIn 0.6s ease-out;
+  position: relative;
+  z-index: 2;
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+  overflow: hidden;
+}
+
+.reminder-content::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: linear-gradient(90deg, #3b82f6, #9333ea);
+  z-index: 3;
+}
+
+.reminder-content::after {
+  content: '';
+  position: absolute;
+  top: -100%;
+  left: -100%;
+  width: 300%;
+  height: 300%;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 40%);
+  z-index: -1;
+  animation: rotateGradient 20s linear infinite;
+  opacity: 0.5;
+}
+
+@keyframes rotateGradient {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.reminder-title {
+  font-size: 42px;
+  font-weight: 800;
+  margin-bottom: 40px;
+  color: #fff;
+  text-shadow: 0 2px 10px rgba(59, 130, 246, 0.5);
+  background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: 0.5px;
+  position: relative;
+  display: inline-block;
+}
+
+.reminder-title::after {
+  content: '';
+  position: absolute;
+  bottom: -15px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80px;
+  height: 3px;
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  border-radius: 3px;
+}
+
+/* 倒计时样式 */
+.countdown-container {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  margin: 0 auto 40px;
+}
+
+.countdown-ring {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.countdown-ring svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  filter: drop-shadow(0 0 15px rgba(59, 130, 246, 0.4));
+  transform: rotate(-90deg);
+}
+
+.countdown-ring circle:first-child {
+  stroke: rgba(255, 255, 255, 0.05);
+}
+
+.countdown-ring circle:last-child {
+  stroke: #3b82f6;
+  filter: drop-shadow(0 0 5px rgba(59, 130, 246, 0.5));
+  transition: stroke-dashoffset 0.5s;
+  stroke-linecap: round;
+}
+
+.countdown-time {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 64px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 2px 10px rgba(59, 130, 246, 0.2);
+  font-family: 'Poppins', 'SF Pro Display', sans-serif;
+  letter-spacing: -1px;
+}
+
+/* 提示文本样式 */
+.reminder-instructions {
+  margin-bottom: 40px;
+  line-height: 1.7;
+}
+
+.reminder-instructions p {
+  margin-bottom: 18px;
+  font-size: 18px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: 0.2px;
+}
+
+/* 背景光效元素 */
+.reminder-background-effects {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.light-orb {
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.4) 0%, rgba(59, 130, 246, 0.1) 40%, transparent 70%);
+  filter: blur(60px);
+  transition: opacity 1.5s ease-in-out;
+  animation: floatOrb 15s infinite alternate ease-in-out;
+}
+
+@keyframes floatOrb {
+  0% {
+    transform: translate(0, 0);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translate(50px, -30px);
+    opacity: 0.7;
+  }
+  100% {
+    transform: translate(-30px, 20px);
+    opacity: 0.5;
+  }
+}
+
+/* 内容淡入动画 */
+.content-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* 添加提示信息容器样式 */
+.tip-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(59, 130, 246, 0.15);
+  border-radius: 16px;
+  padding: 15px 20px;
+  margin-bottom: 30px;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.tip-icon {
+  font-size: 22px;
+  margin-right: 15px;
+  color: #60a5fa;
+}
+
+.tip {
+  font-size: 16px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.6;
+  text-align: left;
+}
+
+.countdown-label {
+  font-size: 16px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  position: absolute;
+  bottom: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.skip-text {
+  font-size: 14px;
+  margin-left: 8px;
+}
+
+.skip-icon {
+  transition: transform 0.3s ease;
+}
+
+.skip-button:hover .skip-icon {
+  transform: translateX(3px);
+  /* 当鼠标悬停在按钮上时，图标向右微移 */
+}
+
+.skip-button {
+  position: relative;
+  padding: 12px 24px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 10px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.skip-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(96, 165, 250, 0), rgba(96, 165, 250, 0.1), rgba(96, 165, 250, 0));
+  background-size: 200% 100%;
+  background-position: -100% 0;
+  transition: background-position 0.6s ease;
+}
+
+.skip-button:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+.skip-button:hover::before {
+  background-position: 100% 0;
+}
+
+.skip-button:active {
+  transform: translateY(0);
+}
