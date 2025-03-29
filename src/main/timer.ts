@@ -1,255 +1,243 @@
 /**
- * 计时器模块
- * 实现番茄钟工作法的工作和休息计时
+ * 计时器状态枚举
  */
-
-// 计时器状态枚举
 export enum TimerState {
-  IDLE = 0,     // 空闲状态
+  IDLE = 0,     // 空闲
   WORKING = 1,  // 工作中
   RESTING = 2,  // 休息中
-  PAUSED = 3,   // 暂停状态
+  PAUSED = 3,   // 暂停
 }
-
-// 计时器事件回调类型
-type TimerCallbacks = {
-  onUpdate: (data: { remainingTime: number; totalTime: number; state: TimerState }) => void;
-  onWorkComplete: () => void;
-  onRestComplete: () => void;
-};
 
 /**
  * 计时器类
- * 管理番茄钟计时器的不同状态和计时逻辑
+ * 负责管理工作和休息时间的计时
  */
 export class Timer {
-  // 当前状态
   private _state: TimerState = TimerState.IDLE;
-  // 工作时间和休息时间（秒）
-  private workTime: number = 25 * 60;
-  private restTime: number = 20;
-  // 剩余时间（秒）
-  private remainingTime: number = 0;
-  // 计时器间隔ID
-  private intervalId: NodeJS.Timeout | null = null;
-  // 上次计数时间
-  private lastCountTime: number = 0;
-  // 事件回调
-  private callbacks: TimerCallbacks;
+  private _workTime: number = 0;
+  private _restTime: number = 0;
+  private _remainingTime: number = 0;
+  private _intervalId: NodeJS.Timeout | null = null;
+  private _lastTickTime: number = 0;
+  
+  // 回调函数
+  private _updateCallback: ((state: TimerState, remainingTime: number, totalTime: number) => void) | null = null;
+  private _restStartCallback: (() => void) | null = null;
+  private _restEndCallback: (() => void) | null = null;
 
   /**
-   * 构造函数
-   * @param callbacks 事件回调
-   */
-  constructor(callbacks: TimerCallbacks) {
-    this.callbacks = callbacks;
-  }
-
-  /**
-   * 获取当前状态
+   * 获取当前计时器状态
    */
   get state(): TimerState {
     return this._state;
   }
 
   /**
-   * 更新状态并通知监听器
+   * 设置计时器更新回调
+   * @param callback 回调函数
    */
-  private updateState(newState: TimerState): void {
-    this._state = newState;
-    this.updateUI();
+  setUpdateCallback(callback: (state: TimerState, remainingTime: number, totalTime: number) => void): void {
+    this._updateCallback = callback;
   }
 
   /**
-   * 更新UI
+   * 设置休息开始回调
+   * @param callback 回调函数
    */
-  private updateUI(): void {
-    // 通过回调函数更新UI
-    this.callbacks.onUpdate({
-      remainingTime: this.remainingTime,
-      totalTime: this._state === TimerState.WORKING ? this.workTime : this.restTime,
-      state: this._state,
-    });
+  setRestStartCallback(callback: () => void): void {
+    this._restStartCallback = callback;
+  }
+
+  /**
+   * 设置休息结束回调
+   * @param callback 回调函数
+   */
+  setRestEndCallback(callback: () => void): void {
+    this._restEndCallback = callback;
   }
 
   /**
    * 启动计时器
    * @param workTime 工作时间（秒）
    * @param restTime 休息时间（秒）
-   * @returns 是否成功启动
    */
-  startTimer(workTime?: number, restTime?: number): boolean {
-    console.log(`启动计时器: 当前状态=${this._state}, 工作时间=${workTime}, 休息时间=${restTime}`);
-
-    // 如果已在工作中或休息中，则不重新启动
-    if (this._state === TimerState.WORKING || this._state === TimerState.RESTING) {
-      console.log('计时器已在运行中，无需重新启动');
-      return false;
-    }
-
-    // 如果是暂停状态，恢复计时
-    if (this._state === TimerState.PAUSED) {
-      console.log('从暂停状态恢复计时');
-      this.resumeTimer();
-      return true;
-    }
-
-    // 更新工作时间和休息时间
-    if (workTime !== undefined && workTime > 0) {
-      this.workTime = workTime;
-    }
-    if (restTime !== undefined && restTime > 0) {
-      this.restTime = restTime;
-    }
-
-    // 从空闲状态开始，设置为工作时间
-    this.remainingTime = this.workTime;
-    this.updateState(TimerState.WORKING);
+  startTimer(workTime: number, restTime: number): void {
+    console.log(`启动计时器: 工作时间=${workTime}秒, 休息时间=${restTime}秒`);
     
-    // 开始计时
-    this.startCounting();
-    return true;
+    // 如果当前是暂停状态，恢复计时器
+    if (this._state === TimerState.PAUSED) {
+      this.resumeTimer();
+      return;
+    }
+    
+    // 设置工作和休息时间
+    this._workTime = workTime;
+    this._restTime = restTime;
+    this._remainingTime = workTime;
+    
+    // 更新状态并启动计时
+    this._state = TimerState.WORKING;
+    this._startTicking();
+    
+    // 触发更新回调
+    this._triggerUpdate();
   }
 
   /**
    * 暂停计时器
-   * @returns 是否成功暂停
    */
-  pauseTimer(): boolean {
-    // 只有在工作中才能暂停
-    if (this._state !== TimerState.WORKING) {
-      console.log(`当前状态(${this._state})不支持暂停操作`);
-      return false;
+  pauseTimer(): void {
+    console.log('暂停计时器');
+    
+    // 如果计时器正在运行，暂停它
+    if (this._state === TimerState.WORKING || this._state === TimerState.RESTING) {
+      this._stopTicking();
+      this._state = TimerState.PAUSED;
+      
+      // 触发更新回调
+      this._triggerUpdate();
     }
-
-    // 暂停计时
-    this.stopCounting();
-    this.updateState(TimerState.PAUSED);
-    return true;
   }
 
   /**
    * 恢复计时器
-   * @returns 是否成功恢复
    */
-  private resumeTimer(): boolean {
-    // 只有暂停状态才能恢复
-    if (this._state !== TimerState.PAUSED) {
-      console.log(`当前状态(${this._state})不支持恢复操作`);
-      return false;
+  resumeTimer(): void {
+    console.log('恢复计时器');
+    
+    // 如果计时器处于暂停状态，恢复它
+    if (this._state === TimerState.PAUSED) {
+      this._startTicking();
+      
+      // 触发更新回调
+      this._triggerUpdate();
     }
-
-    // 恢复为工作状态并重新开始计时
-    this.updateState(TimerState.WORKING);
-    this.startCounting();
-    return true;
   }
 
   /**
    * 重置计时器
-   * @returns 是否成功重置
    */
-  resetTimer(): boolean {
-    // 停止计时
-    this.stopCounting();
-    // 重置状态为空闲
-    this.updateState(TimerState.IDLE);
-    // 重置剩余时间
-    this.remainingTime = 0;
-    this.updateUI();
-    return true;
-  }
-
-  /**
-   * 强制完成休息
-   * @returns 是否成功完成休息
-   */
-  finishRest(): boolean {
-    if (this._state !== TimerState.RESTING) {
-      console.log(`当前状态(${this._state})不是休息状态，无法完成休息`);
-      return false;
-    }
-
-    console.log('强制完成休息时间');
-    this.stopCounting();
-    this.updateState(TimerState.IDLE);
-    this.remainingTime = 0;
-    this.updateUI();
-    this.callbacks.onRestComplete();
-    return true;
-  }
-
-  /**
-   * 停止计时器
-   */
-  stopTimer(): void {
-    this.stopCounting();
-    this.updateState(TimerState.IDLE);
-  }
-
-  /**
-   * 开始倒计时
-   */
-  private startCounting(): void {
-    // 在开始倒计时前停止已存在的定时器
-    this.stopCounting();
+  resetTimer(): void {
+    console.log('重置计时器');
     
-    // 记录当前时间
-    this.lastCountTime = Date.now();
+    // 停止计时并重置状态
+    this._stopTicking();
+    this._state = TimerState.IDLE;
+    this._remainingTime = 0;
     
-    // 创建一个新的定时器
-    this.intervalId = setInterval(() => this.tick(), 100); // 每100毫秒更新一次
+    // 触发更新回调
+    this._triggerUpdate();
   }
 
   /**
-   * 停止倒计时
+   * 结束休息
    */
-  private stopCounting(): void {
-    if (this.intervalId !== null) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
+  finishRest(): void {
+    console.log('结束休息');
+    
+    // 如果当前是休息状态，提前结束
+    if (this._state === TimerState.RESTING) {
+      this._stopTicking();
+      this._state = TimerState.IDLE;
+      this._remainingTime = 0;
+      
+      // 触发休息结束回调
+      if (this._restEndCallback) {
+        this._restEndCallback();
+      }
+      
+      // 触发更新回调
+      this._triggerUpdate();
     }
   }
 
   /**
-   * 倒计时执行逻辑
+   * 开始计时
    */
-  private tick(): void {
-    // 计算实际经过的时间（秒）
+  private _startTicking(): void {
+    // 先停止已有的计时器
+    this._stopTicking();
+    
+    // 记录开始时间
+    this._lastTickTime = Date.now();
+    
+    // 启动新计时器
+    this._intervalId = setInterval(() => this._tick(), 100);
+  }
+
+  /**
+   * 停止计时
+   */
+  private _stopTicking(): void {
+    if (this._intervalId) {
+      clearInterval(this._intervalId);
+      this._intervalId = null;
+    }
+  }
+
+  /**
+   * 计时器周期函数
+   */
+  private _tick(): void {
+    // 计算当前与上次计时的时间差
     const now = Date.now();
-    const elapsed = (now - this.lastCountTime) / 1000;
-    this.lastCountTime = now;
-
-    // 更新剩余时间
-    this.remainingTime = Math.max(0, this.remainingTime - elapsed);
+    const elapsed = (now - this._lastTickTime) / 1000;
+    this._lastTickTime = now;
     
-    // 更新UI
-    this.updateUI();
-
-    // 检查是否完成
-    if (this.remainingTime <= 0) {
-      this.handleTimeComplete();
+    // 更新剩余时间
+    this._remainingTime = Math.max(0, this._remainingTime - elapsed);
+    
+    // 触发更新回调
+    this._triggerUpdate();
+    
+    // 检查是否达到时间限制
+    if (this._remainingTime <= 0) {
+      this._handleTimeUp();
     }
   }
 
   /**
-   * 处理时间完成的逻辑
+   * 处理时间结束
    */
-  private handleTimeComplete(): void {
-    this.stopCounting();
-
+  private _handleTimeUp(): void {
+    // 停止计时
+    this._stopTicking();
+    
+    // 根据当前状态进行相应处理
     if (this._state === TimerState.WORKING) {
-      // 工作时间结束，转入休息时间
-      console.log('工作时间结束，转入休息时间');
-      this.remainingTime = this.restTime;
-      this.updateState(TimerState.RESTING);
-      this.startCounting();
-      this.callbacks.onWorkComplete();
+      // 工作时间结束，进入休息时间
+      console.log('工作时间结束，进入休息时间');
+      this._state = TimerState.RESTING;
+      this._remainingTime = this._restTime;
+      
+      // 触发休息开始回调
+      if (this._restStartCallback) {
+        this._restStartCallback();
+      }
+      
+      // 开始休息计时
+      this._startTicking();
     } else if (this._state === TimerState.RESTING) {
-      // 休息时间结束，回到初始状态
-      console.log('休息时间结束，回到初始状态');
-      this.updateState(TimerState.IDLE);
-      this.callbacks.onRestComplete();
+      // 休息时间结束，回到空闲状态
+      console.log('休息时间结束');
+      this._state = TimerState.IDLE;
+      
+      // 触发休息结束回调
+      if (this._restEndCallback) {
+        this._restEndCallback();
+      }
+    }
+  }
+
+  /**
+   * 触发更新回调
+   */
+  private _triggerUpdate(): void {
+    if (this._updateCallback) {
+      const totalTime = this._state === TimerState.WORKING ? this._workTime : 
+                        this._state === TimerState.RESTING ? this._restTime : 0;
+      
+      this._updateCallback(this._state, this._remainingTime, totalTime);
     }
   }
 }
