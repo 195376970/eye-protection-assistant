@@ -1,0 +1,18 @@
+appId: "com.eyecare.assistant"
+productName: "护眼小助手"
+files:
+  - "dist/**/*"
+  - "!**/node_modules/**/*"
+directories:
+  buildResources: "assets"
+  output: "dist"
+win:
+  target: ["nsis"]
+  icon: "assets/icon.ico"
+  artifactName: "${productName}-Setup-${version}.${ext}"
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: "护眼小助手"
